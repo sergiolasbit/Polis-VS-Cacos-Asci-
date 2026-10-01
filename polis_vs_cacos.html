@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Polis VS Cacos</title>
+    <style>
+        /* Base Reset & Mobile Optimizations */
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .hidden { display: none !important; }
+
+        .screen {
+            width: 100%;
+            max-width: 500px;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* --- TITLE SCREEN --- */
+        #title-screen {
+            background-color: #161b22;
+            border: 2px solid #30363d;
+            border-radius: 12px;
+            max-height: 90vh;
+            padding: 40px 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            gap: 40px;
+        }
+
+        .ascii-title {
+            color: #58a6ff;
+            white-space: pre;
+            font-size: clamp(8px, 2.5vw, 14px);
+            font-weight: bold;
+            line-height: 1.1;
+            text-align: center;
+            text-shadow: 0 0 10px rgba(88,166,255,0.4);
+        }
+
+        .btn-start {
+            background-color: #238636;
+            color: #fff;
+            border: 2px solid #2ea043;
+            padding: 15px 50px;
+            font-size: 20px;
+            font-family: inherit;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.2s;
+        }
+
+        .btn-start:active {
+            transform: scale(0.95);
+            background-color: #2ea043;
+        }
+
+        /* --- GAME SCREEN --- */
+        #game-screen {
+            justify-content: flex-start;
+            padding: 10px;
+        }
+
+        /* Turn Indicator */
+        #turn-indicator {
+            width: 100%;
+            text-align: center;
+            padding: 15px;
+            margin-bottom: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 8px;
+            border: 2px solid #30363d;
+            background: #161b22;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .turn-p1 { color: #f85149; border-color: #f85149 !important; box-shadow: 0 0 15px rgba(248,81,73,0.2); }
+        .turn-p2 { color: #58a6ff; border-color: #58a6ff !important; box-shadow: 0 0 15px rgba(88,166,255,0.2); }
+
+        /* Board Container */
+        #board-wrapper {
+            width: 100%;
+            aspect-ratio: 1;
+            background-color: #010409;
+            border: 3px solid #30363d;
+            border-radius: 8px;
+            padding: 4px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        }
+
+        #board {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-template-rows: repeat(12, 1fr);
+            width: 100%;
+            height: 100%;
+            gap: 2px;
+        }
+
+        /* Cells */
+        .cell {
+            background-color: #0d1117;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(14px, 5vw, 24px);
+            font-weight: bold;
+            border-radius: 2px;
+            cursor: pointer;
+            position: relative;
+            transition: background-color 0.1s;
+        }
+
+        /* Environment */
+        .cell.barrier {
+            background-color: #30363d;
+            color: #8b949e;
+        }
+        
+        .cell.green-zone {
+            background-color: rgba(46, 160, 67, 0.15);
+            border: 1px dashed #2ea043;
+        }
+
+        /* Highlights */
+        .cell.highlight {
+            background-color: rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 0 0 2px #ffffff;
+            z-index: 10;
+        }
+
+        .cell.selected {
+            background-color: rgba(255, 255, 255, 0.3);
+            box-shadow: inset 0 0 0 2px #fff;
+        }
+
+        /* Pieces */
+        .piece-p1 { color: #f85149; text-shadow: 0 0 5px rgba(248,81,73,0.5); }
+        .piece-p2 { color: #58a6ff; text-shadow: 0 0 5px rgba(88,166,255,0.5); }
+        
+        .piece-gold { 
+            color: #ffd700; 
+            text-shadow: 0 0 8px rgba(255,215,0,0.8); 
+            animation: pulse-gold 1.5s infinite alternate;
+        }
+
+        /* Jailed Pieces */
+        .jailed {
+            opacity: 0.5;
+            text-decoration: line-through;
+            text-decoration-thickness: 2px;
+            text-decoration-color: #c9d1d9;
+        }
+
+        @keyframes pulse-gold {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.15); }
+        }
+
+        /* Activity Log */
+        #log {
+            width: 100%;
+            height: 60px;
+            margin-top: 15px;
+            padding: 10px;
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #8b949e;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .log-entry { animation: fadein 0.3s ease; }
+        @keyframes fadein { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    </style>
+</head>
+<body>
+
+    <!-- TITLE SCREEN -->
+    <div id="title-screen" class="screen">
+        <div class="ascii-title">
+  ___  ____  __    ____ ____ 
+ / __)(  _ \(  )  (_  _) ___)
+( (__  )___/ /(_/\ _)(_ \___ \
+ \___)(__)  \____/(____)(____/
+             VS
+ ____  ____  __   ____  ____ 
+(  _ \(  _ \(  ) (  _ \/ ___)
+ )___/ )___/ )(   )___/\___ \
+(__)  (__)  (__) (__)  (____/
+        </div>
+        <div style="text-align: center; color: #8b949e; font-size: 14px;">
+            <p>J1 (Rojo 0) vs J2 (Azul 1)</p>
+            <p style="margin-top:10px;">Captura enemigos y enciérralos</p>
+            <p>en las zonas verdes.</p>
+        </div>
+        <button class="btn-start" onclick="startGame()">Comenzar</button>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="screen hidden">
+        <div id="turn-indicator" class="turn-p1">
+            TURNO: POLIS (J1)
+        </div>
+        
+        <div id="board-wrapper">
+            <div id="board">
+                <!-- Cells generated via JS -->
+            </div>
+        </div>
+
+        <div id="log">
+            <div class="log-entry">> Sistema inicializado.</div>
+        </div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 12;
+        let grid = []; // 2D array representing board state
+        let pieces = []; // Array of active pieces
+        let currentTurn = 1; // 1 = P1 (Red), 2 = P2 (Blue)
+        let selectedPiece = null;
+        let validMoves = []; // Array of valid destination {r, c}
+
+        // DOM Elements
+        const boardEl = document.getElementById('board');
+        const turnIndicator = document.getElementById('turn-indicator');
+        const logEl = document.getElementById('log');
+
+        function logMessage(msg) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `> ${msg}`;
+            logEl.prepend(entry);
+        }
+
+        function startGame() {
+            document.getElementById('title-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            initBoard();
+            renderBoard();
+            logMessage("¡Partida comenzada!");
+        }
+
+        function initBoard() {
+            grid = [];
+            pieces = [];
+            currentTurn = 1;
+            selectedPiece = null;
+            validMoves = [];
+            updateTurnIndicator();
+
+            // Create empty grid
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                let row = [];
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    row.push({ type: 'empty', jailedTeam: null });
+                }
+                grid.push(row);
+            }
+
+            // Place 15 random barriers (avoiding rows 0,1 and 10,11 to keep spawns clear)
+            let barriersPlaced = 0;
+            while (barriersPlaced < 15) {
+                let r = Math.floor(Math.random() * (BOARD_SIZE - 4)) + 2; // Rows 2 to 9
+                let c = Math.floor(Math.random() * BOARD_SIZE);
+                if (grid[r][c].type === 'empty') {
+                    grid[r][c].type = 'barrier';
+                    barriersPlaced++;
+                }
+            }
+
+            // Place 10 random green zones
+            let greensPlaced = 0;
+            while (greensPlaced < 10) {
+                let r = Math.floor(Math.random() * (BOARD_SIZE - 2)) + 1; // Rows 1 to 10
+                let c = Math.floor(Math.random() * BOARD_SIZE);
+                if (grid[r][c].type === 'empty') {
+                    grid[r][c].type = 'green';
+                    greensPlaced++;
+                }
+            }
+
+            // Place Pieces (5 per player)
+            // Player 1 (Red 0, Bottom)
+            const p1Cols = [1, 3, 5, 7, 9];
+            p1Cols.forEach(c => {
+                pieces.push({ id: `p1_${c}`, player: 1, r: 11, c: c, state: 'normal', char: '0' });
+            });
+
+            // Player 2 (Blue 1, Top)
+            const p2Cols = [2, 4, 6, 8, 10];
+            p2Cols.forEach(c => {
+                pieces.push({ id: `p2_${c}`, player: 2, r: 0, c: c, state: 'normal', char: '1' });
+            });
+        }
+
+        function getPieceAt(r, c) {
+            return pieces.find(p => p.r === r && p.c === c && p.state !== 'captured' && p.state !== 'jailed');
+        }
+
+        function renderBoard() {
+            boardEl.innerHTML = '';
+            
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cellData = grid[r][c];
+                    const cellEl = document.createElement('div');
+                    cellEl.className = 'cell';
+                    cellEl.dataset.r = r;
+                    cellEl.dataset.c = c;
+
+                    // Base Environment
+                    if (cellData.type === 'barrier') {
+                        cellEl.classList.add('barrier');
+                        cellEl.textContent = '█';
+                    } else if (cellData.type === 'green') {
+                        cellEl.classList.add('green-zone');
+                    }
+
+                    // Draw Jailed pieces (acts as permanent barriers in green zones)
+                    if (cellData.jailedTeam !== null) {
+                        const jailedChar = cellData.jailedTeam === 1 ? '0' : '1';
+                        const teamClass = cellData.jailedTeam === 1 ? 'piece-p1' : 'piece-p2';
+                        cellEl.innerHTML = `<span class="${teamClass} jailed">${jailedChar}</span>`;
+                        cellEl.classList.add('barrier'); // Functionally acts as barrier
+                    }
+
+                    // Draw Active Pieces
+                    const piece = getPieceAt(r, c);
+                    if (piece) {
+                        const span = document.createElement('span');
+                        span.textContent = piece.char;
+                        if (piece.state === 'gold') {
+                            span.className = 'piece-gold';
+                        } else {
+                            span.className = piece.player === 1 ? 'piece-p1' : 'piece-p2';
+                        }
+                        cellEl.appendChild(span);
+                    }
+
+                    // Selection & Highlights
+                    if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) {
+                        cellEl.classList.add('selected');
+                    }
+                    
+                    if (validMoves.some(m => m.r === r && m.c === c)) {
+                        cellEl.classList.add('highlight');
+                    }
+
+                    cellEl.addEventListener('click', () => handleCellClick(r, c));
+                    boardEl.appendChild(cellEl);
+                }
+            }
+        }
+
+        function handleCellClick(r, c) {
+            const pieceAtCell = getPieceAt(r, c);
+            const isValidMove = validMoves.some(m => m.r === r && m.c === c);
+
+            // 1. If clicking a valid destination, execute move
+            if (selectedPiece && isValidMove) {
+                executeMove(selectedPiece, r, c);
+                return;
+            }
+
+            // 2. If clicking own piece, select it and calculate moves
+            if (pieceAtCell && pieceAtCell.player === currentTurn) {
+                if (selectedPiece === pieceAtCell) {
+                    // Deselect
+                    selectedPiece = null;
+                    validMoves = [];
+                } else {
+                    // Select new piece
+                    selectedPiece = pieceAtCell;
+                    calculateValidMoves(selectedPiece);
+                }
+                renderBoard();
+                return;
+            }
+
+            // 3. Otherwise, click outside, clear selection
+            if (selectedPiece && !isValidMove) {
+                selectedPiece = null;
+                validMoves = [];
+                renderBoard();
+            }
+        }
+
+        function calculateValidMoves(piece) {
+            validMoves = [];
+            const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]; // Up, Down, Left, Right
+
+            for (const [dr, dc] of directions) {
+                let currR = piece.r + dr;
+                let currC = piece.c + dc;
+
+                while (currR >= 0 && currR < BOARD_SIZE && currC >= 0 && currC < BOARD_SIZE) {
+                    const cell = grid[currR][currC];
+                    
+                    // Stop at static barriers or jailed pieces
+                    if (cell.type === 'barrier' || cell.jailedTeam !== null) break;
+
+                    const hitPiece = getPieceAt(currR, currC);
+                    if (hitPiece) {
+                        // Stop if own piece
+                        if (hitPiece.player === piece.player) break;
+                        
+                        // Enemy Piece
+                        if (piece.state === 'normal') {
+                            // Can capture -> include cell as valid move, then stop ray
+                            validMoves.push({ r: currR, c: currC });
+                        }
+                        // If state is gold, cannot capture, so stop ray before enemy (do not include)
+                        break;
+                    } else {
+                        // Empty cell or green cell (traversable)
+                        validMoves.push({ r: currR, c: currC });
+                    }
+
+                    currR += dr;
+                    currC += dc;
+                }
+            }
+        }
+
+        function executeMove(piece, destR, destC) {
+            const targetPiece = getPieceAt(destR, destC);
+
+            // Handle Captures
+            if (targetPiece && targetPiece.player !== piece.player) {
+                targetPiece.state = 'captured'; // Removes from board rendering
+                piece.state = 'gold'; // Upgrade to gold
+                logMessage(`J${piece.player} ha capturado una pieza enemiga.`);
+            }
+
+            // Move the piece
+            piece.r = destR;
+            piece.c = destC;
+
+            // Handle Jailing (Dropping captive on Green zone)
+            const destCell = grid[destR][destC];
+            if (destCell.type === 'green' && piece.state === 'gold') {
+                piece.state = 'normal'; // Revert to normal
+                const enemyTeam = piece.player === 1 ? 2 : 1;
+                destCell.jailedTeam = enemyTeam; // Set permanent barrier
+                
+                // We actually don't need to track the specific captured piece, 
+                // just marking the cell as having a jailed piece handles the logic.
+                
+                logMessage(`¡J${piece.player} encarceló a un enemigo en zona verde!`);
+            }
+
+            // Clear selections and switch turn
+            selectedPiece = null;
+            validMoves = [];
+            currentTurn = currentTurn === 1 ? 2 : 1;
+            
+            updateTurnIndicator();
+            renderBoard();
+            checkWinCondition();
+        }
+
+        function updateTurnIndicator() {
+            if (currentTurn === 1) {
+                turnIndicator.textContent = "TURNO: POLIS (J1)";
+                turnIndicator.className = "turn-p1";
+            } else {
+                turnIndicator.textContent = "TURNO: CACOS (J2)";
+                turnIndicator.className = "turn-p2";
+            }
+        }
+
+        function checkWinCondition() {
+            // Count movable pieces for each player (normal or gold)
+            const p1Active = pieces.filter(p => p.player === 1 && (p.state === 'normal' || p.state === 'gold')).length;
+            const p2Active = pieces.filter(p => p.player === 2 && (p.state === 'normal' || p.state === 'gold')).length;
+
+            if (p1Active === 0) {
+                alert("¡CACOS (J2) GANA LA PARTIDA! Todas las Polis han sido eliminadas.");
+                logMessage("FIN DEL JUEGO: Victoria de J2.");
+                resetGame();
+            } else if (p2Active === 0) {
+                alert("¡POLIS (J1) GANA LA PARTIDA! Todos los Cacos han sido eliminados.");
+                logMessage("FIN DEL JUEGO: Victoria de J1.");
+                resetGame();
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('title-screen').classList.remove('hidden');
+            document.getElementById('game-screen').classList.add('hidden');
+            logEl.innerHTML = '<div class="log-entry">> Sistema inicializado.</div>';
+        }
+
+    </script>
+</body>
+</html>
