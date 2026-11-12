@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Polis VS Cacos - Edición IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --p1-color: #ff4d4d; /* Rojo */
+            --p2-color: #3399ff; /* Azul */
+            --p3-color: #ff944d; /* Naranja (Aliado P1) */
+            --p4-color: #00e5ff; /* Cyan (Aliado P2) */
+            --bg-color: #0d1117;
+            --wall-color: #30363d;
+            --jail-bg: #0d381e;
+            --jail-border: #2ea043;
+            --gold-color: #ffd700;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #c9d1d9;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(11, 1fr);
+            grid-template-rows: repeat(11, 1fr);
+            width: 100%;
+            max-width: 480px;
+            aspect-ratio: 1;
+            background-color: #161b22;
+            border: 2px solid #484f58;
+            gap: 1px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border-radius: 6px;
+        }
+
+        .cell {
+            background-color: var(--bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+            font-size: clamp(12px, 3.8vw, 22px);
+            font-weight: bold;
+        }
+
+        .cell.wall {
+            background-color: var(--wall-color);
+            color: #6e7681;
+        }
+
+        .cell.jail {
+            background-color: var(--jail-bg);
+            box-shadow: inset 0 0 0 1px var(--jail-border);
+        }
+
+        .cell.jail-filled {
+            background-color: #15221b;
+            box-shadow: inset 0 0 0 1px #30363d;
+            opacity: 0.7;
+        }
+
+        .cell.danger-zone {
+            background-color: #2a0a0a;
+            box-shadow: inset 0 0 0 1px #8b0000;
+        }
+
+        .cell.highlight {
+            box-shadow: inset 0 -4px 0 0 white;
+            background-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .cell.selected {
+            background-color: rgba(255, 255, 255, 0.25);
+            box-shadow: inset 0 0 0 2px white;
+        }
+
+        .piece {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 1px 1px 3px black;
+            font-weight: 900;
+        }
+
+        .piece.captured-holder {
+            text-decoration: line-through;
+            text-decoration-thickness: 3px;
+            text-decoration-color: var(--gold-color);
+        }
+
+        .star {
+            color: var(--gold-color);
+            font-size: 0.7em;
+            margin-left: -2px;
+            text-shadow: 0 0 6px var(--gold-color);
+        }
+
+        .btn-mode {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 13px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-mode:active { transform: scale(0.97); }
+
+        .tool-btn {
+            border: 2px solid #30363d;
+            transition: all 0.15s ease;
+        }
+        .tool-btn.active-tool {
+            border-color: #ffffff;
+            background-color: rgba(255, 255, 255, 0.15);
+            transform: scale(1.03);
+        }
+
+        pre { line-height: 1.1; }
+    </style>
+</head>
+<body class="p-2 sm:p-4">
+
+    <!-- MODAL PERSONALIZADO (Para victorias y mensajes) -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+        <div class="bg-[#161b22] border-2 border-[#484f58] rounded-xl p-5 max-w-sm w-full text-center space-y-4 shadow-2xl">
+            <h3 id="modal-title" class="text-lg font-bold text-white">Aviso</h3>
+            <p id="modal-message" class="text-sm text-gray-300"></p>
+            <div id="modal-input-container" class="hidden">
+                <input type="text" id="modal-input" placeholder="Nombre del mapa..." maxlength="20"
+                    class="w-full bg-[#0d1117] border border-[#30363d] rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-[#58a6ff]">
+            </div>
+            <div class="flex justify-center gap-3 pt-2">
+                <button id="modal-cancel" class="hidden px-4 py-2 rounded bg-[#30363d] text-white text-xs font-bold">Cancelar</button>
+                <button id="modal-confirm" class="px-5 py-2 rounded bg-[#238636] text-white text-xs font-bold">Aceptar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MENÚ PRINCIPAL -->
+    <div id="menu-screen" class="flex flex-col items-center justify-between w-full h-full max-w-md mx-auto py-2 space-y-3 overflow-y-auto">
+        <div class="text-center mt-1">
+            <pre class="text-[9px] sm:text-xs text-white font-bold text-[#58a6ff]">
+██████╗  ██╗  ██╗██████╗ 
+╚════██╗ ██║  ██║╚════██╗
+ █████╔╝ ██║  ██║ █████╔╝
+██╔═══╝  ╚██╗██╔╝██╔═══╝ 
+███████╗  ╚███╔╝ ███████╗
+╚══════╝   ╚══╝  ╚══════╝
+      VS CACOS
+            </pre>
+            <p class="text-xs text-gray-400 mt-1">Estrategia ASCII Móvil con IA</p>
+        </div>
+
+        <div class="w-full space-y-2.5">
+            <div class="text-xs font-bold text-gray-400 border-b border-gray-700 pb-1">MODOS 1 VS 1</div>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="startGame('1v1', [false, false])" class="btn-mode bg-[#238636] text-white border border-[#2ea043]">
+                    🎮 1v1 Local
+                </button>
+                <button onclick="startGame('1v1', [false, true])" class="btn-mode bg-[#8957e5] text-white border border-[#a371f7]">
+                    🤖 1v1 vs IA
+                </button>
+            </div>
+
+            <div class="text-xs font-bold text-gray-400 border-b border-gray-700 pb-1 pt-1">MODOS 2 VS 2 (EQUIPOS)</div>
+            <div class="flex flex-col space-y-1.5">
+                <button onclick="startGame('2v2', [false, false, false, false])" class="btn-mode bg-[#1f6beb] text-white border border-[#388bfd]">
+                    🎮 2v2 Local Total (4P)
+                </button>
+                <button onclick="startGame('2v2', [false, false, true, true])" class="btn-mode bg-[#d29922] text-black border border-[#f2cc60]">
+                    🤝 J1 & J2 vs IAs (P3 & P4)
+                </button>
+                <button onclick="startGame('2v2', [false, true, true, true])" class="btn-mode bg-[#da3633] text-white border border-[#f85149]">
+                    🔥 J1 & IA(P3) vs IAs (P2 & P4)
+                </button>
+                <button onclick="startGame('2v2', [false, true, false, true])" class="btn-mode bg-[#238636] text-white border border-[#2ea043]">
+                    ⚔️ J1 + IA(P3) vs J2 + IA(P4)
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-[#161b22] border border-[#30363d] p-2.5 rounded-lg text-[11px] text-gray-400 w-full space-y-1">
+            <p class="font-bold text-gray-200 border-b border-gray-700 pb-1">GUÍA DE JUEGO</p>
+            <p><span class="text-white font-bold">0</span>: Ortogonal (Torre) | <span class="text-white font-bold">1</span>: Diagonal (Alfil).</p>
+            <p>• Comer otorga estado <span class="text-yellow-400 font-bold">DORADO (★)</span> y tachado.</p>
+            <p>• Entrar a celda <span class="text-green-400 font-bold">VERDE</span> con ★ encarcela la ficha (+1 pt).</p>
+        </div>
+
+        <!-- BOTÓN INFERIOR: CREADOR DE ESCENARIOS -->
+        <div class="w-full pt-1 mt-auto">
+            <button onclick="openEditorSetup()" class="btn-mode bg-[#21262d] hover:bg-[#30363d] text-[#58a6ff] border-2 border-[#58a6ff] py-3">
+                🛠️ CREADOR DE ESCENARIOS
+            </button>
+        </div>
+    </div>
+
+    <!-- PANTALLA DE CONFIGURACIÓN DEL EDITOR Y LISTA DE MAPAS -->
+    <div id="editor-setup-screen" class="hidden flex-col items-center w-full max-w-md mx-auto py-3 space-y-4 h-full overflow-y-auto">
+        <div class="w-full flex justify-between items-center border-b border-gray-700 pb-2">
+            <h2 class="text-base font-bold text-[#58a6ff]">🛠️ CREADOR DE ESCENARIOS</h2>
+            <button onclick="showMenu()" class="text-xs text-gray-400 hover:text-white underline">🏠 Volver</button>
+        </div>
+
+        <div class="w-full bg-[#161b22] border border-[#30363d] p-4 rounded-lg space-y-3">
+            <p class="text-xs font-bold text-gray-200 text-center">CREAR NUEVO MAPA</p>
+            <p class="text-[11px] text-gray-400 text-center">Elige la disposición inicial de los equipos:</p>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="initEditor('1v1')" class="btn-mode bg-[#238636] text-white border border-[#2ea043] flex-col py-3">
+                    <span class="text-sm">⚔️ Mapa 1 vs 1</span>
+                    <span class="text-[10px] font-normal opacity-80">10 Fichas (J1 vs J2)</span>
+                </button>
+                <button onclick="initEditor('2v2')" class="btn-mode bg-[#1f6beb] text-white border border-[#388bfd] flex-col py-3">
+                    <span class="text-sm">🛡️ Mapa 2 vs 2</span>
+                    <span class="text-[10px] font-normal opacity-80">20 Fichas (4 Equipos)</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="w-full bg-[#161b22] border border-[#30363d] p-3 rounded-lg flex-grow flex flex-col space-y-2 overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-700 pb-1">
+                <span class="text-xs font-bold text-gray-200">📂 MAPAS GUARDADOS</span>
+                <span id="saved-maps-count" class="text-[10px] text-gray-400">0 mapas</span>
+            </div>
+            <div id="saved-maps-list" class="flex-grow overflow-y-auto space-y-2 pr-1">
+                <!-- Lista generada dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <!-- PANTALLA DEL EDITOR DE TABLERO -->
+    <div id="editor-screen" class="hidden flex-col items-center w-full max-w-2xl mx-auto py-2 space-y-3">
+        <div class="w-full flex justify-between items-center bg-[#161b22] border border-[#30363d] px-3 py-2 rounded-lg">
+            <div>
+                <span class="text-xs font-bold text-[#58a6ff]">EDITOR DE MAPA</span>
+                <span id="editor-mode-badge" class="ml-2 text-[10px] px-2 py-0.5 rounded bg-gray-800 text-white font-bold">1v1</span>
+            </div>
+            <button onclick="openEditorSetup()" class="text-xs text-gray-400 hover:text-white underline">⬅️ Salir</button>
+        </div>
+
+        <!-- Contenedor Principal: Tablero + Herramientas Laterales -->
+        <div class="w-full flex flex-col sm:flex-row items-center sm:items-start justify-center gap-3">
+            
+            <!-- Cuadrícula del Editor -->
+            <div id="editor-board" class="grid grid-cols-11 grid-rows-11 w-full max-w-[380px] aspect-square bg-[#161b22] border-2 border-[#484f58] gap-[1px] rounded-md shadow-xl"></div>
+
+            <!-- Panel Lateral de Herramientas -->
+            <div class="w-full sm:w-44 bg-[#161b22] border border-[#30363d] p-3 rounded-lg flex flex-col space-y-3">
+                <div class="text-[11px] font-bold text-gray-300 border-b border-gray-700 pb-1 text-center">HERRAMIENTAS</div>
+                
+                <div class="grid grid-cols-2 sm:grid-cols-1 gap-2">
+                    <!-- Herramienta Pared -->
+                    <button id="tool-wall" onclick="selectEditorTool('wall')" class="tool-btn active-tool bg-[#0d1117] p-2.5 rounded-lg flex flex-col items-center">
+                        <div class="flex items-center gap-2">
+                            <span class="w-5 h-5 flex items-center justify-center bg-[#30363d] text-gray-300 font-bold rounded text-xs">#</span>
+                            <span class="text-xs font-bold text-white">Obstáculo</span>
+                        </div>
+                        <span id="wall-counter" class="text-[11px] text-gray-400 mt-1">Quedan: 12 / 12</span>
+                    </button>
+
+                    <!-- Herramienta Zona de Puntaje -->
+                    <button id="tool-jail" onclick="selectEditorTool('jail')" class="tool-btn bg-[#0d1117] p-2.5 rounded-lg flex flex-col items-center">
+                        <div class="flex items-center gap-2">
+                            <span class="w-5 h-5 flex items-center justify-center bg-[#0d381e] border border-[#2ea043] rounded"></span>
+                            <span class="text-xs font-bold text-green-400">Puntaje</span>
+                        </div>
+                        <span id="jail-counter" class="text-[11px] text-gray-400 mt-1">Quedan: 10 / 10</span>
+                    </button>
+                </div>
+
+                <!-- Herramienta Borrador (Alternativa táctil al clic derecho) -->
+                <button id="tool-erase" onclick="selectEditorTool('erase')" class="tool-btn bg-[#0d1117] p-2 rounded-lg flex items-center justify-center gap-2">
+                    <span class="text-xs font-bold text-red-400">🧹 Borrar Celda</span>
+                </button>
+
+                <div class="text-[10px] text-gray-400 bg-[#0d1117] p-2 rounded border border-gray-800 leading-tight">
+                    • <b>Clic Izq:</b> Pintar<br>
+                    • <b>Clic Der:</b> Borrar y recuperar contador
+                </div>
+
+                <button onclick="clearEditorBoard()" class="w-full py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-[11px] font-bold">
+                    🗑️ Limpiar Todo
+                </button>
+            </div>
+        </div>
+
+        <!-- Botones Inferiores: Probar y Guardar -->
+        <div class="w-full max-w-[560px] grid grid-cols-2 gap-3 pt-1">
+            <button onclick="promptTestEditorMap()" class="btn-mode bg-[#238636] text-white border border-[#2ea043]">
+                ▶️ PROBAR MAPA
+            </button>
+            <button onclick="promptSaveEditorMap()" class="btn-mode bg-[#1f6beb] text-white border border-[#388bfd]">
+                💾 GUARDAR EN LISTA
+            </button>
+        </div>
+    </div>
+
+    <!-- ESCENA DE JUEGO -->
+    <div id="game-screen" class="hidden flex-col items-center w-full max-w-lg mx-auto space-y-2">
+        
+        <!-- Marcador HUD -->
+        <div class="w-full bg-[#161b22] border border-[#30363d] rounded-lg p-2 flex justify-between items-center shadow-lg">
+            <div class="flex flex-col text-center px-2">
+                <span class="text-[10px] font-bold text-gray-400">EQUIPO POLIS</span>
+                <span id="score-team1" class="text-xl font-bold text-white">0</span>
+            </div>
+            
+            <div class="flex flex-col items-center flex-grow">
+                <div id="turn-indicator" class="text-xs font-bold px-3 py-1 rounded border mb-1">
+                    Turno: P1
+                </div>
+                <div id="shrink-counter" class="text-[10px] text-red-400 font-bold">
+                    Reducción en: 12 turnos
+                </div>
+                <div id="ai-status" class="text-[10px] text-yellow-400 h-3 font-semibold"></div>
+            </div>
+
+            <div class="flex flex-col text-center px-2">
+                <span class="text-[10px] font-bold text-gray-400">EQUIPO CACOS</span>
+                <span id="score-team2" class="text-xl font-bold text-white">0</span>
+            </div>
+        </div>
+
+        <!-- Tablero ASCII 11x11 -->
+        <div id="game-board"></div>
+
+        <!-- Barra inferior de acciones -->
+        <div class="w-full flex justify-between items-center text-[11px] px-1 font-bold">
+            <div class="flex space-x-2">
+                <span style="color: var(--p1-color)">■ J1</span>
+                <span id="legend-p3" style="color: var(--p3-color)">■ J3(IA)</span>
+            </div>
+            <div class="flex space-x-2">
+                <button onclick="restartCurrentMatch()" class="text-gray-400 hover:text-white underline">🔄 Reiniciar</button>
+                <button id="btn-back-editor" onclick="returnToEditorFromTest()" class="hidden text-yellow-400 hover:text-yellow-300 underline">🛠️ Volver a Editar</button>
+                <button onclick="showMenu()" class="text-gray-400 hover:text-white underline">🏠 Menú</button>
+            </div>
+            <div class="flex space-x-2">
+                <span id="legend-p4" style="color: var(--p4-color)">■ J4(IA)</span>
+                <span style="color: var(--p2-color)">■ J2</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 11;
+        const MAX_WALLS = 12;
+        const MAX_JAILS = 10;
+
+        let grid = [];
+        let pieces = [];
+        let gameMode = '1v1';
+        let isAIPlayer = [false, false, false, false]; // [P1, P2, P3, P4]
+        let scores = { 1: 0, 2: 0 }; // Team 1 (Polis), Team 2 (Cacos)
+        let currentTurnPlayer = 1;
+        let turnOrder = [];
+        let selectedPiece = null;
+        let validMoves = [];
+        let isAITinking = false;
+
+        let totalTurnCount = 0;
+        let dangerLayers = 0; // Cuántas capas de borde se han reducido
+        const TURNS_PER_SHRINK = 12;
+
+        // Estado para mapas personalizados y editor
+        let activeCustomLayout = null; // null = aleatorio, o { mode, walls: [{r,c}], jails: [{r,c}] }
+        let isTestingFromEditor = false;
+        let savedMaps = []; // Almacena mapas en memoria durante la sesión
+        let editorState = {
+            mode: '1v1',
+            tool: 'wall', // 'wall' | 'jail' | 'erase'
+            grid: [], // 'empty' | 'wall' | 'jail'
+            spawns: [] // [{player, r, c, type}]
+        };
+
+        const PLAYERS = {
+            1: { id: 1, team: 1, color: 'var(--p1-color)', name: 'J1 (Polis)' },
+            2: { id: 2, team: 2, color: 'var(--p2-color)', name: 'J2 (Cacos)' },
+            3: { id: 3, team: 1, color: 'var(--p3-color)', name: 'J3 (Aliado)' },
+            4: { id: 4, team: 2, color: 'var(--p4-color)', name: 'J4 (Aliado)' }
+        };
+
+        const DOM = {
+            menu: document.getElementById('menu-screen'),
+            editorSetup: document.getElementById('editor-setup-screen'),
+            editor: document.getElementById('editor-screen'),
+            game: document.getElementById('game-screen'),
+            board: document.getElementById('game-board'),
+            editorBoard: document.getElementById('editor-board'),
+            score1: document.getElementById('score-team1'),
+            score2: document.getElementById('score-team2'),
+            turnIndicator: document.getElementById('turn-indicator'),
+            shrinkCounter: document.getElementById('shrink-counter'),
+            aiStatus: document.getElementById('ai-status'),
+            legendP3: document.getElementById('legend-p3'),
+            legendP4: document.getElementById('legend-p4'),
+            btnBackEditor: document.getElementById('btn-back-editor')
+        };
+
+        /* --- SISTEMA DE MODALES PERSONALIZADOS --- */
+        function showCustomModal({ title, message, showInput = false, showCancel = false, confirmText = 'Aceptar', onConfirm = null }) {
+            const modal = document.getElementById('custom-modal');
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').textContent = message;
+            
+            const inputContainer = document.getElementById('modal-input-container');
+            const inputField = document.getElementById('modal-input');
+            if (showInput) {
+                inputContainer.classList.remove('hidden');
+                inputField.value = '';
+                setTimeout(() => inputField.focus(), 50);
+            } else {
+                inputContainer.classList.add('hidden');
+            }
+
+            const cancelBtn = document.getElementById('modal-cancel');
+            if (showCancel) {
+                cancelBtn.classList.remove('hidden');
+            } else {
+                cancelBtn.classList.add('hidden');
+            }
+
+            const confirmBtn = document.getElementById('modal-confirm');
+            confirmBtn.textContent = confirmText;
+
+            const close = () => modal.classList.add('hidden');
+
+            cancelBtn.onclick = close;
+            confirmBtn.onclick = () => {
+                const val = inputField.value.trim();
+                close();
+                if (onConfirm) onConfirm(val);
+            };
+
+            modal.classList.remove('hidden');
+        }
+
+        function hideAllScreens() {
+            DOM.menu.classList.add('hidden');
+            DOM.editorSetup.classList.add('hidden');
+            DOM.editor.classList.add('hidden');
+            DOM.game.classList.add('hidden');
+        }
+
+        function showMenu() {
+            hideAllScreens();
+            DOM.menu.classList.remove('hidden');
+            isAITinking = false;
+            activeCustomLayout = null;
+            isTestingFromEditor = false;
+        }
+
+        /* --- LÓGICA DEL CREADOR DE ESCENARIOS --- */
+        function openEditorSetup() {
+            hideAllScreens();
+            DOM.editorSetup.classList.remove('hidden');
+            DOM.editorSetup.style.display = 'flex';
+            renderSavedMapsList();
+        }
+
+        function getInitialSpawns(mode) {
+            const spawnPattern = ['1', '0', '0', '0', '1'];
+            let spawns = [];
+            for (let i = 0; i < 5; i++) spawns.push({ player: 1, r: 10, c: i + 3, type: spawnPattern[i] });
+            for (let i = 0; i < 5; i++) spawns.push({ player: 2, r: 0, c: i + 3, type: spawnPattern[i] });
+            if (mode === '2v2') {
+                for (let i = 0; i < 5; i++) spawns.push({ player: 3, r: i + 3, c: 0, type: spawnPattern[i] });
+                for (let i = 0; i < 5; i++) spawns.push({ player: 4, r: i + 3, c: 10, type: spawnPattern[i] });
+            }
+            return spawns;
+        }
+
+        function initEditor(mode, existingLayout = null) {
+            editorState.mode = mode;
+            editorState.tool = 'wall';
+            editorState.spawns = getInitialSpawns(mode);
+            editorState.grid = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill('empty'));
+
+            if (existingLayout) {
+                existingLayout.walls.forEach(w => { editorState.grid[w.r][w.c] = 'wall'; });
+                existingLayout.jails.forEach(j => { editorState.grid[j.r][j.c] = 'jail'; });
+            }
+
+            document.getElementById('editor-mode-badge').textContent = mode.toUpperCase();
+            selectEditorTool('wall');
+            
+            hideAllScreens();
+            DOM.editor.classList.remove('hidden');
+            DOM.editor.style.display = 'flex';
+            
+            updateEditorCounters();
+            drawEditorBoard();
+        }
+
+        function selectEditorTool(toolName) {
+            editorState.tool = toolName;
+            ['wall', 'jail', 'erase'].forEach(t => {
+                const btn = document.getElementById(`tool-${t}`);
+                if (t === toolName) btn.classList.add('active-tool');
+                else btn.classList.remove('active-tool');
+            });
+        }
+
+        function getEditorCounts() {
+            let walls = 0;
+            let jails = 0;
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (editorState.grid[r][c] === 'wall') walls++;
+                    if (editorState.grid[r][c] === 'jail') jails++;
+                }
+            }
+            return { walls, jails };
+        }
+
+        function updateEditorCounters() {
+            const { walls, jails } = getEditorCounts();
+            document.getElementById('wall-counter').textContent = `Quedan: ${MAX_WALLS - walls} / ${MAX_WALLS}`;
+            document.getElementById('jail-counter').textContent = `Quedan: ${MAX_JAILS - jails} / ${MAX_JAILS}`;
+        }
+
+        function handleEditorCellClick(r, c, isRightClick = false) {
+            // Impedir modificar las casillas iniciales de las fichas
+            const hasSpawn = editorState.spawns.some(s => s.r === r && s.c === c);
+            if (hasSpawn) return;
+
+            if (isRightClick || editorState.tool === 'erase') {
+                if (editorState.grid[r][c] !== 'empty') {
+                    editorState.grid[r][c] = 'empty';
+                    updateEditorCounters();
+                    drawEditorBoard();
+                }
+                return;
+            }
+
+            const { walls, jails } = getEditorCounts();
+            const currentCell = editorState.grid[r][c];
+
+            if (editorState.tool === 'wall') {
+                if (currentCell === 'wall') {
+                    editorState.grid[r][c] = 'empty';
+                } else if (walls < MAX_WALLS) {
+                    editorState.grid[r][c] = 'wall';
+                }
+            } else if (editorState.tool === 'jail') {
+                if (currentCell === 'jail') {
+                    editorState.grid[r][c] = 'empty';
+                } else if (jails < MAX_JAILS) {
+                    editorState.grid[r][c] = 'jail';
+                }
+            }
+
+            updateEditorCounters();
+            drawEditorBoard();
+        }
+
+        function clearEditorBoard() {
+            editorState.grid = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill('empty'));
+            updateEditorCounters();
+            drawEditorBoard();
+        }
+
+        function drawEditorBoard() {
+            DOM.editorBoard.innerHTML = '';
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cellElem = document.createElement('div');
+                    cellElem.className = 'cell';
+
+                    const cellType = editorState.grid[r][c];
+                    if (cellType === 'wall') {
+                        cellElem.classList.add('wall');
+                        cellElem.textContent = '#';
+                    } else if (cellType === 'jail') {
+                        cellElem.classList.add('jail');
+                    }
+
+                    const spawn = editorState.spawns.find(s => s.r === r && s.c === c);
+                    if (spawn) {
+                        const span = document.createElement('span');
+                        span.className = 'piece';
+                        span.style.color = PLAYERS[spawn.player].color;
+                        span.textContent = spawn.type;
+                        cellElem.appendChild(span);
+                        cellElem.title = 'Posición inicial de equipo';
+                    }
+
+                    // Clic izquierdo para pintar / alternar
+                    cellElem.onclick = () => handleEditorCellClick(r, c, false);
+                    
+                    // Clic derecho para borrar
+                    cellElem.oncontextmenu = (e) => {
+                        e.preventDefault();
+                        handleEditorCellClick(r, c, true);
+                    };
+
+                    DOM.editorBoard.appendChild(cellElem);
+                }
+            }
+        }
+
+        function exportEditorLayout() {
+            let walls = [];
+            let jails = [];
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (editorState.grid[r][c] === 'wall') walls.push({ r, c });
+                    if (editorState.grid[r][c] === 'jail') jails.push({ r, c });
+                }
+            }
+            return {
+                mode: editorState.mode,
+                walls,
+                jails
+            };
+        }
+
+        function promptTestEditorMap() {
+            const layout = exportEditorLayout();
+            isTestingFromEditor = true;
+            const aiConfig = layout.mode === '1v1' ? [false, true] : [false, true, true, true];
+            startGame(layout.mode, aiConfig, layout);
+        }
+
+        function returnToEditorFromTest() {
+            if (!activeCustomLayout) return;
+            isAITinking = false;
+            isTestingFromEditor = false;
+            initEditor(activeCustomLayout.mode, activeCustomLayout);
+        }
+
+        function promptSaveEditorMap() {
+            const layout = exportEditorLayout();
+            showCustomModal({
+                title: '💾 Guardar Escenario',
+                message: `Introduce un nombre para tu mapa (${layout.mode.toUpperCase()}):`,
+                showInput: true,
+                showCancel: true,
+                confirmText: 'Guardar',
+                onConfirm: (name) => {
+                    const mapName = name || `Mapa ${layout.mode.toUpperCase()} #${savedMaps.length + 1}`;
+                    savedMaps.push({
+                        id: Date.now(),
+                        name: mapName,
+                        ...layout
+                    });
+                    showCustomModal({
+                        title: '¡Guardado!',
+                        message: `El escenario "${mapName}" se ha añadido a tu lista de mapas.`
+                    });
+                }
+            });
+        }
+
+        function renderSavedMapsList() {
+            const listEl = document.getElementById('saved-maps-list');
+            const countEl = document.getElementById('saved-maps-count');
+            countEl.textContent = `${savedMaps.length} mapa${savedMaps.length !== 1 ? 's' : ''}`;
+            listEl.innerHTML = '';
+
+            if (savedMaps.length === 0) {
+                listEl.innerHTML = `<div class="text-center text-gray-500 text-xs py-8">Aún no has guardado ningún mapa.<br>Crea uno arriba y guárdalo.</div>`;
+                return;
+            }
+
+            savedMaps.forEach((mapItem) => {
+                const card = document.createElement('div');
+                card.className = 'bg-[#0d1117] border border-[#30363d] p-2.5 rounded-lg flex flex-col gap-2';
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <span class="text-xs font-bold text-white">${mapItem.name}</span>
+                            <span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-[#58a6ff] font-bold">${mapItem.mode.toUpperCase()}</span>
+                        </div>
+                        <span class="text-[10px] text-gray-400">🧱${mapItem.walls.length} | 🟩${mapItem.jails.length}</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button onclick="playSavedMap(${mapItem.id}, false)" class="py-1 rounded bg-[#238636] text-white text-[10px] font-bold">🎮 Local</button>
+                        <button onclick="playSavedMap(${mapItem.id}, true)" class="py-1 rounded bg-[#8957e5] text-white text-[10px] font-bold">🤖 vs IA</button>
+                        <div class="flex gap-1">
+                            <button onclick="editSavedMap(${mapItem.id})" class="flex-1 py-1 rounded bg-[#1f6beb] text-white text-[10px] font-bold">✏️</button>
+                            <button onclick="deleteSavedMap(${mapItem.id})" class="flex-1 py-1 rounded bg-[#da3633] text-white text-[10px] font-bold">🗑️</button>
+                        </div>
+                    </div>
+                `;
+                listEl.appendChild(card);
+            });
+        }
+
+        function playSavedMap(id, vsAI) {
+            const mapItem = savedMaps.find(m => m.id === id);
+            if (!mapItem) return;
+            isTestingFromEditor = false;
+            let aiConfig;
+            if (mapItem.mode === '1v1') {
+                aiConfig = vsAI ? [false, true] : [false, false];
+            } else {
+                aiConfig = vsAI ? [false, true, true, true] : [false, false, false, false];
+            }
+            startGame(mapItem.mode, aiConfig, mapItem);
+        }
+
+        function editSavedMap(id) {
+            const mapItem = savedMaps.find(m => m.id === id);
+            if (!mapItem) return;
+            initEditor(mapItem.mode, mapItem);
+        }
+
+        function deleteSavedMap(id) {
+            savedMaps = savedMaps.filter(m => m.id !== id);
+            renderSavedMapsList();
+        }
+
+        /* --- MOTOR PRINCIPAL DEL JUEGO --- */
+        function startGame(mode, aiConfig, customLayout = null) {
+            gameMode = mode;
+            activeCustomLayout = customLayout;
+
+            if (mode === '1v1') {
+                isAIPlayer = [aiConfig[0], aiConfig[1], false, false];
+                turnOrder = [1, 2];
+            } else {
+                isAIPlayer = [...aiConfig];
+                turnOrder = [1, 2, 3, 4];
+            }
+
+            if (isTestingFromEditor) {
+                DOM.btnBackEditor.classList.remove('hidden');
+            } else {
+                DOM.btnBackEditor.classList.add('hidden');
+            }
+
+            restartCurrentMatch();
+        }
+
+        function restartCurrentMatch() {
+            scores = { 1: 0, 2: 0 };
+            currentTurnPlayer = 1;
+            selectedPiece = null;
+            validMoves = [];
+            isAITinking = false;
+            totalTurnCount = 0;
+            dangerLayers = 0;
+            
+            DOM.legendP3.style.display = gameMode === '2v2' ? 'inline' : 'none';
+            DOM.legendP4.style.display = gameMode === '2v2' ? 'inline' : 'none';
+
+            if(gameMode === '2v2') {
+                DOM.legendP3.textContent = `■ J3${isAIPlayer[2] ? '(IA)' : ''}`;
+                DOM.legendP4.textContent = `■ J4${isAIPlayer[3] ? '(IA)' : ''}`;
+            }
+
+            hideAllScreens();
+            DOM.game.classList.remove('hidden');
+            DOM.game.style.display = 'flex';
+
+            generateBoard();
+            updateUI();
+            drawBoard();
+
+            checkAndExecuteAITurn();
+        }
+
+        function isDangerZone(r, c, layers = dangerLayers) {
+            return r < layers || r >= BOARD_SIZE - layers || c < layers || c >= BOARD_SIZE - layers;
+        }
+
+        // Definición de los Tableros Base Modulares (T1 y T2) separados por sus 5 capas concéntricas
+        const MODULAR_TEMPLATES = {
+            T1: {
+                // Capa 1 (Anillo 0): limpia
+                1: { jails: [], walls: [] },
+                // Capa 2 (Anillo 1): 2 Verdes, 0 Obstáculos
+                2: { jails: [[1,3], [9,7]], walls: [] },
+                // Capa 3 (Anillo 2): 2 Verdes, 8 Obstáculos
+                3: { jails: [[2,8], [8,2]], walls: [[2,2], [2,5], [4,2], [4,8], [5,2], [6,8], [8,5], [8,8]] },
+                // Capa 4 (Anillo 3): 4 Verdes, 4 Obstáculos
+                4: { jails: [[3,3], [4,7], [6,3], [7,7]], walls: [[3,5], [3,7], [7,3], [7,5]] },
+                // Capa 5 (Núcleo central 3x3): 2 Verdes, 0 Obstáculos
+                5: { jails: [[4,5], [6,6]], walls: [] }
+            },
+            T2: {
+                // Capa 1 (Anillo 0): limpia
+                1: { jails: [], walls: [] },
+                // Capa 2 (Anillo 1): 2 Verdes, 0 Obstáculos
+                2: { jails: [[1,8], [9,2]], walls: [] },
+                // Capa 3 (Anillo 2): 2 Verdes, 8 Obstáculos
+                3: { jails: [[2,5], [8,5]], walls: [[2,3], [2,7], [3,2], [4,8], [6,2], [7,8], [8,3], [8,7]] },
+                // Capa 4 (Anillo 3): 4 Verdes, 4 Obstáculos
+                4: { jails: [[3,6], [4,3], [6,7], [7,4]], walls: [[3,4], [4,7], [6,3], [7,6]] },
+                // Capa 5 (Núcleo central 3x3): 2 Verdes, 0 Obstáculos
+                5: { jails: [[5,4], [5,5]], walls: [] }
+            }
+        };
+
+        // Rotar coordenada (r, c) 90 grados en sentido horario N veces alrededor del centro (5,5)
+        function rotateCoord(r, c, times) {
+            let nr = r;
+            let nc = c;
+            for (let i = 0; i < times; i++) {
+                const prevR = nr;
+                nr = nc;
+                nc = (BOARD_SIZE - 1) - prevR;
+            }
+            return [nr, nc];
+        }
+
+        function generateBoard() {
+            grid = Array.from({ length: BOARD_SIZE }, () => 
+                Array.from({ length: BOARD_SIZE }, () => ({ type: 'empty', jailedPiece: null }))
+            );
+            pieces = [];
+
+            if (activeCustomLayout) {
+                // Cargar diseño personalizado creado en el Editor
+                activeCustomLayout.walls.forEach(w => {
+                    grid[w.r][w.c].type = 'wall';
+                });
+                activeCustomLayout.jails.forEach(j => {
+                    grid[j.r][j.c].type = 'jail';
+                });
+            } else {
+                // Seleccionar aleatoriamente una de las 32 combinaciones posibles (2^5) entre T1 y T2
+                // y rotar cada anillo independientemente (0°, 90°, 180°, 270°)
+                for (let layer = 1; layer <= 5; layer++) {
+                    const sourceKey = Math.random() < 0.5 ? 'T1' : 'T2';
+                    const rotTimes = Math.floor(Math.random() * 4); // 0, 1, 2 o 3 rotaciones de 90°
+                    const layerData = MODULAR_TEMPLATES[sourceKey][layer];
+
+                    layerData.walls.forEach(([r, c]) => {
+                        const [rr, rc] = rotateCoord(r, c, rotTimes);
+                        grid[rr][rc].type = 'wall';
+                    });
+
+                    layerData.jails.forEach(([r, c]) => {
+                        const [rr, rc] = rotateCoord(r, c, rotTimes);
+                        grid[rr][rc].type = 'jail';
+                    });
+                }
+            }
+
+            const spawns = getInitialSpawns(gameMode);
+            spawns.forEach(s => createPiece(s.player, s.r, s.c, s.type));
+        }
+
+        function createPiece(playerId, r, c, type) {
+            pieces.push({
+                id: pieces.length,
+                player: playerId,
+                team: PLAYERS[playerId].team,
+                type: type, // '0' o '1'
+                r: r,
+                c: c,
+                isActive: true,
+                capturedEnemy: null
+            });
+        }
+
+        function getActivePieceAt(r, c) {
+            return pieces.find(p => p.isActive && p.r === r && p.c === c);
+        }
+
+        function isCellCollapsed(r, c) {
+            return isDangerZone(r, c, dangerLayers);
+        }
+
+        function calculateValidMovesForPiece(piece, currentGrid = grid, currentPieces = pieces) {
+            let moves = [];
+            const directions = piece.type === '0' 
+                ? [[-1,0], [1,0], [0,-1], [0,1]]
+                : [[-1,-1], [-1,1], [1,-1], [1,1]];
+
+            const originInDanger = isDangerZone(piece.r, piece.c, dangerLayers);
+
+            for(let [dr, dc] of directions) {
+                let cr = piece.r + dr;
+                let cc = piece.c + dc;
+
+                while(cr >= 0 && cr < BOARD_SIZE && cc >= 0 && cc < BOARD_SIZE) {
+                    const targetInDanger = isDangerZone(cr, cc, dangerLayers);
+
+                    // Regla de movilidad en zona roja (peligro):
+                    // 1. Si está en la zona roja, puede moverse libremente por ella O salir hacia la zona segura.
+                    // 2. Una vez en la zona segura (o si ya estaba fuera), NO puede entrar ni volver a entrar en las casillas rojas.
+                    if (!originInDanger && targetInDanger) break;
+
+                    const cell = currentGrid[cr][cc];
+
+                    if(cell.type === 'wall' || cell.jailedPiece !== null) break;
+
+                    const hitPiece = currentPieces.find(p => p.isActive && p.r === cr && p.c === cc);
+                    if(hitPiece) {
+                        if(hitPiece.team === piece.team) break; // Aliado bloquea
+                        
+                        if(piece.capturedEnemy === null) {
+                            moves.push({r: cr, c: cc, capture: true, targetPiece: hitPiece});
+                        }
+                        break;
+                    }
+
+                    moves.push({r: cr, c: cc, capture: false, targetPiece: null});
+                    cr += dr;
+                    cc += dc;
+                }
+            }
+            return moves;
+        }
+
+        function handleCellClick(r, c) {
+            if (isAIPlayer[currentTurnPlayer - 1] || isAITinking) return;
+
+            const clickedPiece = getActivePieceAt(r, c);
+            const isMoveTarget = validMoves.find(m => m.r === r && m.c === c);
+
+            if(selectedPiece && isMoveTarget) {
+                executeMove(selectedPiece, r, c);
+                return;
+            }
+
+            if(clickedPiece && clickedPiece.player === currentTurnPlayer) {
+                if(selectedPiece === clickedPiece) {
+                    selectedPiece = null;
+                    validMoves = [];
+                } else {
+                    selectedPiece = clickedPiece;
+                    validMoves = calculateValidMovesForPiece(selectedPiece);
+                }
+                drawBoard();
+                return;
+            }
+
+            if(selectedPiece) {
+                selectedPiece = null;
+                validMoves = [];
+                drawBoard();
+            }
+        }
+
+        function executeMove(piece, r, c) {
+            const enemy = getActivePieceAt(r, c);
+            
+            if(enemy && enemy.team !== piece.team) {
+                enemy.isActive = false;
+                piece.capturedEnemy = { type: enemy.type, color: PLAYERS[enemy.player].color };
+            }
+
+            piece.r = r;
+            piece.c = c;
+
+            const cell = grid[r][c];
+            if(cell.type === 'jail' && !cell.jailedPiece && piece.capturedEnemy) {
+                cell.jailedPiece = piece.capturedEnemy;
+                scores[piece.team]++;
+                piece.capturedEnemy = null;
+            }
+
+            selectedPiece = null;
+            validMoves = [];
+
+            if (checkWinCondition()) return;
+
+            advanceTurn();
+            drawBoard();
+            checkAndExecuteAITurn();
+        }
+
+        function advanceTurn() {
+            totalTurnCount++;
+
+            // Proceso de reducción cada 12 turnos globales
+            if (totalTurnCount % TURNS_PER_SHRINK === 0) {
+                // 1. Si hay alguna ficha dentro de la zona roja actual al pasar los 12 turnos, se elimina
+                pieces.forEach(p => {
+                    if (p.isActive && isDangerZone(p.r, p.c, dangerLayers)) {
+                        p.isActive = false;
+                    }
+                });
+
+                // 2. Se dibuja la siguiente reducción (nueva capa exterior roja)
+                if (dangerLayers < Math.floor(BOARD_SIZE / 2)) {
+                    dangerLayers++;
+                }
+            }
+
+            let iter = 0;
+            let totalPlayers = turnOrder.length;
+            
+            do {
+                let currentIndex = turnOrder.indexOf(currentTurnPlayer);
+                currentTurnPlayer = turnOrder[(currentIndex + 1) % totalPlayers];
+                iter++;
+                
+                const hasPieces = pieces.some(p => p.isActive && p.player === currentTurnPlayer);
+                if(hasPieces) break;
+            } while (iter < totalPlayers);
+
+            updateUI();
+        }
+
+        function updateUI() {
+            DOM.score1.textContent = scores[1];
+            DOM.score2.textContent = scores[2];
+
+            const player = PLAYERS[currentTurnPlayer];
+            DOM.turnIndicator.textContent = `Turno: ${player.name}`;
+            DOM.turnIndicator.style.borderColor = player.color;
+            DOM.turnIndicator.style.color = player.color;
+
+            const remainingTurns = TURNS_PER_SHRINK - (totalTurnCount % TURNS_PER_SHRINK);
+            DOM.shrinkCounter.textContent = `Reducción en: ${remainingTurns} turno${remainingTurns > 1 ? 's' : ''}`;
+        }
+
+        function checkWinCondition() {
+            // Check if any team has all active pieces in danger zone or no pieces left
+            const activeTeam1 = pieces.filter(p => p.isActive && p.team === 1).length;
+            const activeTeam2 = pieces.filter(p => p.isActive && p.team === 2).length;
+
+            let winnerText = null;
+            if (activeTeam1 === 0 && activeTeam2 === 0) {
+                winnerText = scores[1] > scores[2] ? "¡Gana Equipo POLIS por Puntos!" : (scores[2] > scores[1] ? "¡Gana Equipo CACOS por Puntos!" : "¡EMPATE!");
+            } else if (activeTeam1 === 0) {
+                winnerText = "¡Gana Equipo CACOS (POLIS eliminados)!";
+            } else if (activeTeam2 === 0) {
+                winnerText = "¡Gana Equipo POLIS (CACOS eliminados)!";
+            }
+
+            // Collapse completely check
+            if (dangerLayers >= Math.floor(BOARD_SIZE / 2)) {
+                if (scores[1] > scores[2]) winnerText = "¡Tablero colapsado! Gana POLIS";
+                else if (scores[2] > scores[1]) winnerText = "¡Tablero colapsado! Gana CACOS";
+                else winnerText = "¡Tablero colapsado! Empate";
+            }
+
+            if (winnerText) {
+                setTimeout(() => {
+                    showCustomModal({
+                        title: '🏆 FIN DE LA PARTIDA',
+                        message: winnerText,
+                        confirmText: isTestingFromEditor ? 'Volver al Editor' : 'Ir al Menú',
+                        onConfirm: () => {
+                            if (isTestingFromEditor) returnToEditorFromTest();
+                            else showMenu();
+                        }
+                    });
+                }, 150);
+                return true;
+            }
+            return false;
+        }
+
+        function drawBoard() {
+            DOM.board.innerHTML = '';
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cellElem = document.createElement('div');
+                    cellElem.className = 'cell';
+
+                    const isDanger = isDangerZone(r, c, dangerLayers);
+                    if (isDanger) cellElem.classList.add('danger-zone');
+
+                    const cellData = grid[r][c];
+                    if (cellData.type === 'wall') {
+                        cellElem.classList.add('wall');
+                        cellElem.textContent = '#';
+                    } else if (cellData.type === 'jail') {
+                        if (cellData.jailedPiece) {
+                            cellElem.classList.add('jail-filled');
+                            cellElem.innerHTML = `<span style="color:${cellData.jailedPiece.color}">${cellData.jailedPiece.type}</span>`;
+                        } else {
+                            cellElem.classList.add('jail');
+                        }
+                    }
+
+                    // Selected & Highlights
+                    if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) {
+                        cellElem.classList.add('selected');
+                    }
+                    if (validMoves.some(m => m.r === r && m.c === c)) {
+                        cellElem.classList.add('highlight');
+                    }
+
+                    // Pieces
+                    const p = getActivePieceAt(r, c);
+                    if (p) {
+                        const pieceSpan = document.createElement('span');
+                        pieceSpan.className = 'piece';
+                        pieceSpan.style.color = PLAYERS[p.player].color;
+                        pieceSpan.textContent = p.type;
+
+                        if (p.capturedEnemy) {
+                            pieceSpan.classList.add('captured-holder');
+                            const star = document.createElement('span');
+                            star.className = 'star';
+                            star.textContent = '★';
+                            cellElem.appendChild(pieceSpan);
+                            cellElem.appendChild(star);
+                        } else {
+                            cellElem.appendChild(pieceSpan);
+                        }
+                    }
+
+                    cellElem.onclick = () => handleCellClick(r, c);
+                    DOM.board.appendChild(cellElem);
+                }
+            }
+        }
+
+        /* --- LOGICA DE INTELIGENCIA ARTIFICIAL (IA) --- */
+        function checkAndExecuteAITurn() {
+            if (!isAIPlayer[currentTurnPlayer - 1]) {
+                DOM.aiStatus.textContent = '';
+                return;
+            }
+
+            isAITinking = true;
+            DOM.aiStatus.textContent = `🤖 IA (${PLAYERS[currentTurnPlayer].name}) pensando...`;
+
+            setTimeout(() => {
+                const aiPieces = pieces.filter(p => p.isActive && p.player === currentTurnPlayer);
+                let bestMove = null;
+                let bestScore = -999999;
+
+                aiPieces.forEach(p => {
+                    const moves = calculateValidMovesForPiece(p);
+                    moves.forEach(m => {
+                        let score = evaluateMove(p, m);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMove = { piece: p, move: m };
+                        }
+                    });
+                });
+
+                if (bestMove) {
+                    selectedPiece = bestMove.piece;
+                    validMoves = calculateValidMovesForPiece(selectedPiece);
+                    drawBoard();
+                    setTimeout(() => {
+                        isAITinking = false;
+                        executeMove(bestMove.piece, bestMove.move.r, bestMove.move.c);
+                    }, 400);
+                } else {
+                    isAITinking = false;
+                    advanceTurn();
+                    drawBoard();
+                }
+            }, 500);
+        }
+
+        function evaluateMove(piece, move) {
+            let score = 0;
+            const isDangerCurrently = isDangerZone(piece.r, piece.c, dangerLayers);
+            const isTargetDanger = isDangerZone(move.r, move.c, dangerLayers);
+
+            // Prioridad crítica: si la ficha está en zona roja, escapar hacia la zona segura interior
+            if (isDangerCurrently) {
+                if (!isTargetDanger) {
+                    score += 1500; // Escapar del peligro antes de los 12 turnos
+                } else {
+                    // Si aún no puede salir directamente, acercarse al centro seguro
+                    const center = Math.floor(BOARD_SIZE / 2);
+                    const currDist = Math.abs(piece.r - center) + Math.abs(piece.c - center);
+                    const nextDist = Math.abs(move.r - center) + Math.abs(move.c - center);
+                    score += (currDist - nextDist) * 80;
+                }
+            }
+
+            // Encarcelar ficha capturada en celda verde (Alta prioridad)
+            const targetCell = grid[move.r][move.c];
+            if (piece.capturedEnemy && targetCell.type === 'jail' && !targetCell.jailedPiece) {
+                score += 1000;
+            }
+
+            // Capturar pieza enemiga
+            if (move.capture) {
+                score += 500;
+            }
+
+            // Acercarse a celdas verdes si tiene pieza capturada
+            if (piece.capturedEnemy) {
+                let minDist = 999;
+                for (let r = 0; r < BOARD_SIZE; r++) {
+                    for (let c = 0; c < BOARD_SIZE; c++) {
+                        if (grid[r][c].type === 'jail' && !grid[r][c].jailedPiece) {
+                            let dist = Math.abs(r - move.r) + Math.abs(c - move.c);
+                            if (dist < minDist) minDist = dist;
+                        }
+                    }
+                }
+                score += (20 - minDist) * 10;
+            }
+
+            // Aleatoriedad para variabilidad
+            score += Math.random() * 5;
+            return score;
+        }
+    </script>
+</body>
+</html>
